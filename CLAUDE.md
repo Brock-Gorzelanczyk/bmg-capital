@@ -3,8 +3,48 @@
 Before any work on BMG Capital, read the Obsidian vault at:
 ~/Documents/BMG-Capital-Vault/
 
+## WHEN TO READ WHAT (added 2026-09-11)
+
+Content without triggers is dead weight. Every time-cost of reading a file is only justified when the specific event happens. Below is the trigger table. Deviation is a bug.
+
+### SESSION START
+Read `/state/current.md` **before doing anything else**. Report open calls and what is blocked in **one short paragraph**, then ask what we are working on. Do NOT skim CLAUDE.md and stop — the state file is the point.
+
+Also apply §V1: read `context/05-known-issues.md` and state the top 3 OPEN issues by severity. If the requested task is lower priority than an open P0, say so before starting.
+
+### SESSION END, or when the human says we are done
+**Rewrite** `/state/current.md`. Overwrite it. Do not append. Fields: open research calls (ticker, rating, target, entry, date, status); work in flight (what is half-finished, next step); blocked on (what is waiting on the human, what is needed); last session (date + one line on what changed). Nothing else. No history. No narrative.
+
+### BEFORE writing or revising any research note
+Read `/research/coverage/<sector>/` for that name in full. Read `/research/coverage/rail/falsified.md` in full (regardless of sector — it is the general falsified ledger while we have only one). **If a claim you are about to make appears in `falsified.md`, stop and say so.** Rebuild the argument from primary sources. Do not paraphrase around a falsified claim.
+
+### BEFORE asserting what a company does, does not do, or is exposed to
+**Rule S1 applies.** Cite that company's OWN segment / fleet / revenue-mix disclosure. Peer characterisations, industry aggregates, and derived shares do NOT satisfy it. Before going to the filings, check whether the `/research/coverage/<sector>/` subject notes already contain the disclosed figure with an inline marker.
+
+### BEFORE comparing a metric across two companies
+**Rule S2 applies.** Both metric definitions must be quoted from the respective filings and recorded in the sources file BEFORE the comparison sentence is written. If either definition is missing from the sources file, the comparison is not written yet.
+
+### BEFORE characterising any source's incentive, credibility, or motive
+**Rule S3 applies.** A verbatim quote plus named speaker must exist in the sources file. If not, drop the incentive framing and report only the underlying claim.
+
+### BEFORE proposing any library, framework, or tool
+Check `/reference/quant-stack/` first. If the tool is covered, use the vault's decided position — do NOT relitigate. If the tool is NOT covered, say so explicitly ("no vault entry on X") before making a recommendation.
+
+### AFTER any outside review, failed check, or discovered error
+Write the postmortem in `/postmortems/YYYY-MM-DD-slug.md` **before** doing anything else. Five lines minimum: what happened, root cause, how long undetected, what detected it, what prevents it now. **If a claim was disproved, add it to `/research/coverage/rail/falsified.md`** (or the appropriate falsified.md when we have more than one). "Be more careful" is not a prevention (§V8).
+
+### AFTER shipping any research deliverable with quantitative claims
+Rules 1-9 apply. Companion `-sources.md` file must exist. Run:
+```
+python3 ~/my-new-project/scripts/vault_provenance_check.py <note.md>
+```
+Exit 0 or the note is not shippable. There is no path where nonzero exit is explained and the work is declared complete.
+
+---
+
 REQUIRED reads every session (non-negotiable):
-- 00-INDEX.md
+- **state/current.md** — read FIRST. See "WHEN TO READ WHAT" above. This is the file that ends the session-start amnesia.
+- 00-INDEX.md — table of contents. Points to everything, restates nothing.
 - context/01-brock-profile.md (communication style, what to avoid)
 - context/02-bmg-overview.md (what BMG is)
 - context/04-bot-fleet.md (current allocations, position sizing rules)
