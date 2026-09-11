@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}Track Record{% endblock %}
+{% block content %}
+<h1>Track Record</h1>
+<div class="headline-box">
+  <p><strong>Open:</strong> {{ open_count }}  •  <strong>Closed:</strong> {{ closed_count }}</p>
+  {% if closed_count > 0 %}
+  <p>{{ beat_bench }} of {{ total_closed }} closed calls beat their benchmark.</p>
+  <p class="attrib-line">
+    THESIS_CORRECT: {{ thesis_correct }} of {{ closed_count }} —
+    RIGHT_WRONG_REASON: {{ right_wrong_reason }} of {{ closed_count }} (recorded as luck) —
+    WRONG: {{ wrong_calls }} of {{ closed_count }} —
+    UNRESOLVED: {{ unresolved }} of {{ closed_count }}
+  </p>
+  {% else %}
+  <p class="note">No closed calls yet. Numbers appear as calls resolve.</p>
+  {% endif %}
+</div>
+
+<p class="fetched-at">
+{% if fetched_at %}
+  Prices fetched {{ fetched_at }}. Stale prices display as stale — nothing here pretends to be live.
+{% else %}
+  <em>No price data pulled yet. Run <code>daily_prices.py</code> to populate.</em>
+{% endif %}
+</p>
+
+<table class="calls-table">
+  <thead>
+    <tr>
+      <th>#</th>
+      <th>Ticker</th>
+      <th>Published</th>
+      <th>Entry</th>
+      <th>Target</th>
+      <th>Last</th>
+      <th>Return</th>
+      <th>Benchmark</th>
+      <th>Bench Ret</th>
+      <th>Excess</th>
+      <th>Conv.</th>
+      <th>Kill</th>
+      <th>Status</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for o in outcomes %}
+    {% set c = o.call %}
+    <tr onclick="location.href='/calls/{{ c.slug }}.html'">
+      <td>{{ loop.index }}</td>
+      <td class="ticker">{{ c.ticker }}</td>
+      <td>{{ c.published_at }}</td>
+      <td>${{ '%.2f'|format(c.published_price) }}</td>
+      <td>{% if c.price_target %}${{ '%.2f'|format(c.price_target) }}{% else %}—{% endif %}</td>
+      <td>{% if o.last_price %}${{ '%.2f'|format(o.last_price) }}{% else %}—{% endif %}</td>
+      <td class="{% if o.return_pct and o.return_pct > 0 %}pos{% elif o.return_pct and o.return_pct < 0 %}neg{% endif %}">
+        {% if o.return_pct is not none %}{{ '%+.1f'|format(o.return_pct) }}%{% else %}—{% endif %}
+      </td>
+      <td>{{ c.benchmark }}</td>
+      <td>{% if o.benchmark_return_pct is not none %}{{ '%+.1f'|format(o.benchmark_return_pct) }}%{% else %}—{% endif %}</td>
+      <td class="{% if o.excess_pct and o.excess_pct > 0 %}pos{% elif o.excess_pct and o.excess_pct < 0 %}neg{% endif %}">
+        {% if o.excess_pct is not none %}{{ '%+.1f'|format(o.excess_pct) }}%{% else %}—{% endif %}
+      </td>
+      <td>{{ c.conviction }}/5</td>
+      <td>{{ c.kill_criteria|length }}</td>
+      <td><span class="status status-{{ c.status }}">{{ c.status }}</span></td>
+    </tr>
+  {% endfor %}
+  {% if outcomes|length == 0 %}
+    <tr><td colspan="13" class="empty">No calls yet.</td></tr>
+  {% endif %}
+  </tbody>
+</table>
+{% endblock %}

@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}BMG Capital{% endblock %} — BMG Capital</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header>
+  <a class="brand" href="/">BMG Capital</a>
+  <nav>
+    <a href="/library.html">Library</a>
+    <a href="/track-record.html">Track Record</a>
+    <a href="/process.html">Process</a>
+  </nav>
+</header>
+<main>
+{% block content %}{% endblock %}
+</main>
+<footer>
+<p class="disclaimer">{{ disclaimer }}</p>
+<p class="build-meta">Built {{ build_time }}. Static site. Source: <a href="https://github.com/Brock-Gorzelanczyk/bmg-capital">github.com/Brock-Gorzelanczyk/bmg-capital</a>.</p>
+</footer>
+</body>
+</html>

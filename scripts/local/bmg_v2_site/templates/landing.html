@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Home{% endblock %}
+{% block content %}
+<section class="hero">
+  <h1>Brock Gorzelanczyk — equity research</h1>
+  <p class="lede">
+    Public research portfolio. Every note published as a git commit. Every call tracked against
+    a benchmark. Every process step documented. The point is not the return on a small number
+    of calls — it is the reasoning trail behind each one.
+  </p>
+  <p>
+    Currently a finance undergrad (UWM IMCP). Small-cap equities, with an emphasis on quality-value
+    screening and honest treatment of exclusivity, cyclical durability, and finite cash-flow
+    streams. The process page describes the source hierarchy, the trap library, and the discipline
+    that makes each note reproducible.
+  </p>
+  <p class="cta-row">
+    <a class="cta" href="/library.html">Research Library — {{ calls_total }} note{{ '' if calls_total == 1 else 's' }}</a>
+    <a class="cta" href="/track-record.html">Track Record — {{ closed_count }} closed of {{ calls_total }}</a>
+    <a class="cta" href="/process.html">Process</a>
+  </p>
+</section>
+{% endblock %}

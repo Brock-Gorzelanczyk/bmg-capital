@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}{{ call.ticker }} — {{ call.direction }}{% endblock %}
+{% block content %}
+<article class="note">
+  <header class="note-header">
+    <p class="crumb"><a href="/library.html">← Library</a></p>
+    <h1>{{ call.ticker }} — {{ call.direction }} — Target ${{ '%.2f'|format(call.price_target or 0) }}</h1>
+    <p class="thesis-hero">{{ call.thesis }}</p>
+
+    {% if call.backfill %}
+    <div class="backfill-banner">
+      <strong>Backfilled call.</strong>
+      {% if call.backfill_note %}{{ call.backfill_note }}{% else %}
+      This call was published outside the git ledger and entered later. It is
+      presented as historical for the record, not as a live-committed call.
+      {% endif %}
+    </div>
+    {% endif %}
+
+    <dl class="fact-grid">
+      <dt>Published</dt><dd>{{ call.published_at }}</dd>
+      <dt>Entry price</dt><dd>${{ '%.2f'|format(call.published_price) }}</dd>
+      <dt>Target</dt><dd>{% if call.price_target %}${{ '%.2f'|format(call.price_target) }}{% else %}—{% endif %}</dd>
+      <dt>Horizon</dt><dd>{{ call.horizon_months }} months</dd>
+      <dt>Benchmark</dt><dd>{{ call.benchmark }}</dd>
+      <dt>Conviction</dt><dd>{{ call.conviction }} of 5</dd>
+      <dt>Status</dt><dd><span class="status status-{{ call.status }}">{{ call.status }}</span></dd>
+      {% if outcome.last_price %}
+      <dt>Last price</dt><dd>${{ '%.2f'|format(outcome.last_price) }}</dd>
+      <dt>Return</dt><dd class="{% if outcome.return_pct and outcome.return_pct > 0 %}pos{% elif outcome.return_pct and outcome.return_pct < 0 %}neg{% endif %}">{{ '%+.1f'|format(outcome.return_pct or 0) }}%</dd>
+      <dt>{{ call.benchmark }} return</dt><dd>{% if outcome.benchmark_return_pct is not none %}{{ '%+.1f'|format(outcome.benchmark_return_pct) }}%{% else %}—{% endif %}</dd>
+      <dt>Excess</dt><dd class="{% if outcome.excess_pct and outcome.excess_pct > 0 %}pos{% elif outcome.excess_pct and outcome.excess_pct < 0 %}neg{% endif %}">{% if outcome.excess_pct is not none %}{{ '%+.1f'|format(outcome.excess_pct) }}%{% else %}—{% endif %}</dd>
+      {% endif %}
+      {% if call.closed_price %}
+      <dt>Closed price</dt><dd>${{ '%.2f'|format(call.closed_price) }}</dd>
+      <dt>Closed reason</dt><dd>{{ call.closed_reason }}</dd>
+      <dt>Thesis attribution</dt><dd><span class="attrib attrib-{{ call.thesis_attribution }}">{{ call.thesis_attribution }}</span></dd>
+      {% endif %}
+    </dl>
+
+    {% if call.kill_criteria %}
+    <div class="kill-block">
+      <h3>Kill criteria (written at publication)</h3>
+      <ol>
+      {% for k in call.kill_criteria %}
+        <li>{{ k }}</li>
+      {% endfor %}
+      </ol>
+    </div>
+    {% endif %}
+
+    <p class="commit-line">
+      Publishing commit:
+      {% if call.commit_hash and call.commit_hash != '(uncommitted)' %}
+        <a href="https://github.com/Brock-Gorzelanczyk/bmg-capital-vault/commit/{{ call.commit_hash }}"><code>{{ call.commit_short }}</code></a>
+      {% else %}
+        <code>{{ call.commit_short }}</code>
+      {% endif %}
+      — this is the ledger. Corrections would be new commits, not amends.
+    </p>
+  </header>
+
+  <div class="note-body">
+    {{ call.body_html|safe }}
+  </div>
+</article>
+{% endblock %}

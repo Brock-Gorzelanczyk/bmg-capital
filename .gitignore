@@ -27,3 +27,11 @@ graphify-out/
 # Mockups + one-off screenshots (never intended for repo)
 mock_dashboard.png
 nav-restructure-collapsed.png
+
+# BMG v2 site — generated + local-only
+scripts/local/bmg_v2_site/data/
+scripts/local/bmg_v2_site/out/
+scripts/local/bmg_v2_site/__pycache__/
+
+# openpyxl venv used for local jobs
+/tmp/openpyxl_venv/

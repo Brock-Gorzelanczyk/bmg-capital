@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Research Library{% endblock %}
+{% block content %}
+<h1>Research Library</h1>
+<p class="page-lede">Every published note. Click a row to read the full analysis.</p>
+<table class="calls-table">
+  <thead>
+    <tr>
+      <th>#</th>
+      <th>Published</th>
+      <th>Ticker</th>
+      <th>Direction</th>
+      <th>Entry</th>
+      <th>Target</th>
+      <th>Horizon</th>
+      <th>Thesis</th>
+      <th>Status</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for o in outcomes %}
+    {% set c = o.call %}
+    <tr onclick="location.href='/calls/{{ c.slug }}.html'">
+      <td>{{ loop.index }}</td>
+      <td>{{ c.published_at }}{% if c.backfill %} <span class="backfill-tag">backfill</span>{% endif %}</td>
+      <td class="ticker">{{ c.ticker }}</td>
+      <td class="dir dir-{{ c.direction }}">{{ c.direction }}</td>
+      <td>${{ '%.2f'|format(c.published_price) }}</td>
+      <td>{% if c.price_target %}${{ '%.2f'|format(c.price_target) }}{% else %}—{% endif %}</td>
+      <td>{{ c.horizon_months }}mo</td>
+      <td class="thesis-cell">{{ c.thesis }}</td>
+      <td><span class="status status-{{ c.status }}">{{ c.status }}</span></td>
+    </tr>
+    {% endfor %}
+    {% if outcomes|length == 0 %}
+    <tr><td colspan="9" class="empty">No calls published yet.</td></tr>
+    {% endif %}
+  </tbody>
+</table>
+{% endblock %}
