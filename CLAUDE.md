@@ -248,6 +248,20 @@ Endpoints that ship the backup off-volume:
 
 Ledger #16 (no backup on the *actual* prod DB) stays OPEN until the marker exists and a first off-volume dump has been verified round-trip.
 
+**Amendment 2026-09-11: large binaries and exports go to R2, never to git.**
+
+Any file over **50 MB** — database dumps, provider exports, Parquet snapshots, historical price CSVs, screen exports, anything binary at scale — goes to Cloudflare R2 (`bmg-capital-backups` bucket) and is referenced from git by a **pointer README** carrying (a) the R2 bucket + object key, (b) SHA256, (c) byte size, (d) upload date, (e) the exact download-and-verify commands. GitHub's 100 MB per-file limit is a hard boundary; adding Git LFS just moves the same objects into a paid store with different failure modes. R2 is the store of record for binary artifacts.
+
+Procedure for putting a file over 50 MB into the vault:
+1. Backup the `.git` directory (`cp -a .git ../vault-git-backup-YYYY-MM-DD`) — filter-repo undo.
+2. SHA256 the file locally.
+3. `rclone copyto <file> bmg-r2:bmg-capital-backups/<key>`.
+4. Download to a temp path and re-SHA256. Both hashes must match. Byte-count parity is NOT sufficient — checksums or it did not happen.
+5. Only after Step 4 passes: strip the file from git history with `git-filter-repo --path <path> --invert-paths` (or don't add it to git in the first place, which is the preferred default).
+6. Add the file to `.gitignore`. Write the pointer README with the R2 key, checksum, size, upload date, and restore commands. The pointer README is what makes the object findable later.
+
+Reference case: 2026-09-11 vault push was rejected by GitHub because two v1 DB dumps (106 MB Postgres, 654 MB SQLite) had been committed to a prior local commit that had never reached the remote. Followed the procedure above; repo dropped from 300 MB to 108 MB. See `~/Documents/BMG-Capital-Vault/archive/v1-trading-platform-2026-09-10/data-dump/README.md` for the resulting pointer artifact — it is the reference template for future large-binary archives.
+
 ## Growth-through-vault-loop acceptance
 A fresh session with no pasted context must be able to open its first message with: (a) the top 3 open issues by severity, and (b) the prevention rule from the most recent postmortem. If it can't, the vault is broken — fix the vault before touching code.
 
