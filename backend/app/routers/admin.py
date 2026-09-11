@@ -2653,6 +2653,68 @@ def scans_resume(
     return {"ok": True, "sleeve": sleeve, "force": force, "state": result}
 
 
+@router.get("/download-db-sqlite")
+def download_db_sqlite(
+    current_user: User = Depends(require_admin),
+):
+    """One-shot download of the live SQLite DB as octet-stream.
+
+    Added 2026-09-10 for the v1 platform archive per §V0. Takes a
+    consistent snapshot via SQLite backup API to avoid corruption from
+    concurrent writes, then streams it as a download. The response also
+    includes a X-Row-Counts header for a small set of critical tables so
+    the client can round-trip-verify without a second call.
+
+    Deploys with the v1-final-2026-09-10 archival work. Deprecated the
+    moment v2 replaces this platform.
+    """
+    from fastapi.responses import FileResponse
+    import sqlite3, tempfile
+
+    src = "/data/bmg_capital.db"
+    if not os.path.exists(src):
+        raise HTTPException(status_code=404, detail=f"DB not found at {src}")
+
+    # Snapshot via SQLite backup API to a temp file — safe from concurrent writes
+    tmpfd, tmp_path = tempfile.mkstemp(suffix=".sqlite", prefix="bmg_dl_")
+    os.close(tmpfd)
+    src_conn = sqlite3.connect(f"file:{src}?mode=ro", uri=True)
+    dst_conn = sqlite3.connect(tmp_path)
+    src_conn.backup(dst_conn)
+    dst_conn.close()
+    src_conn.close()
+
+    # Row counts for verification
+    v = sqlite3.connect(f"file:{tmp_path}?mode=ro", uri=True)
+    counts = {}
+    for tbl in ("bot_trades", "bot_positions", "bot_allocations",
+                "invariant_readings", "confluence_picks", "thesis_entries",
+                "users"):
+        try:
+            counts[tbl] = v.execute(f"SELECT COUNT(*) FROM {tbl}").fetchone()[0]
+        except sqlite3.OperationalError:
+            counts[tbl] = None
+    try:
+        counts["bot_trades_BROKER_FILL"] = v.execute(
+            "SELECT COUNT(*) FROM bot_trades WHERE origin='BROKER_FILL'"
+        ).fetchone()[0]
+    except sqlite3.OperationalError:
+        counts["bot_trades_BROKER_FILL"] = None
+    v.close()
+
+    size = os.path.getsize(tmp_path)
+    import json as _json
+    return FileResponse(
+        tmp_path,
+        media_type="application/octet-stream",
+        filename=f"bmg_capital-{int(time.time())}.sqlite",
+        headers={
+            "X-Row-Counts": _json.dumps(counts),
+            "X-Snapshot-Bytes": str(size),
+        },
+    )
+
+
 @router.post("/backup-sqlite-offvolume")
 def backup_sqlite_offvolume(
     current_user: User = Depends(require_admin),
