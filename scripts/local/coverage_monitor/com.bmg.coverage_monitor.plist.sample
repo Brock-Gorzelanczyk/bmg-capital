@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+                    "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<!--
+launchd sample for the BMG coverage monitor.
+
+Runs at 09:15 America/Chicago on weekdays (Mon-Fri).
+SEC releases EDGAR full-text index around 06:00 ET nightly; 09:15 CT
+(10:15 ET) is safely after that plus gives yfinance calendar time to
+refresh with any pre-market updates.
+
+To install:
+    cp com.bmg.coverage_monitor.plist.sample ~/Library/LaunchAgents/com.bmg.coverage_monitor.plist
+    # edit ProgramArguments to match your Python path
+    launchctl load ~/Library/LaunchAgents/com.bmg.coverage_monitor.plist
+
+To uninstall:
+    launchctl unload ~/Library/LaunchAgents/com.bmg.coverage_monitor.plist
+    rm ~/Library/LaunchAgents/com.bmg.coverage_monitor.plist
+-->
+<dict>
+    <key>Label</key>
+    <string>com.bmg.coverage_monitor</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/bin/env</string>
+        <string>python3</string>
+        <string>/Users/brockgorzelanczyk/my-new-project/scripts/local/coverage_monitor/check.py</string>
+    </array>
+
+    <key>StartCalendarInterval</key>
+    <array>
+        <dict><key>Weekday</key><integer>1</integer><key>Hour</key><integer>9</integer><key>Minute</key><integer>15</integer></dict>
+        <dict><key>Weekday</key><integer>2</integer><key>Hour</key><integer>9</integer><key>Minute</key><integer>15</integer></dict>
+        <dict><key>Weekday</key><integer>3</integer><key>Hour</key><integer>9</integer><key>Minute</key><integer>15</integer></dict>
+        <dict><key>Weekday</key><integer>4</integer><key>Hour</key><integer>9</integer><key>Minute</key><integer>15</integer></dict>
+        <dict><key>Weekday</key><integer>5</integer><key>Hour</key><integer>9</integer><key>Minute</key><integer>15</integer></dict>
+    </array>
+
+    <key>RunAtLoad</key>
+    <false/>
+
+    <key>StandardOutPath</key>
+    <string>/tmp/bmg_coverage.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/bmg_coverage.err</string>
+
+    <!-- If missed while asleep, run when Mac wakes. -->
+    <key>StartCalendarIntervalIsAbsolute</key>
+    <true/>
+</dict>
+</plist>
