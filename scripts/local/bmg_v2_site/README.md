@@ -95,6 +95,31 @@ close. It reads all v2 calls from the vault, fetches prices for each ticker
 0 17 * * 1-5 cd ~/my-new-project/scripts/local/bmg_v2_site && python3 daily_prices.py && python3 build.py
 ```
 
+### Alpaca creds
+
+`daily_prices.py` hits Alpaca Market Data v2 (IEX feed on the free tier).
+Copy `.env.example` to `.env` and populate — paper account keys work.
+
+## yfinance blast radius
+
+`yfinance` is an unofficial scraper of Yahoo's web endpoints. It has no
+support contract, and Yahoo has broken it multiple times without notice.
+Any code path that depends on it is fragile.
+
+**Current blast radius:** ZERO in this project as of 2026-09-10.
+
+- `daily_prices.py` — migrated to Alpaca Market Data v2 (2026-09-10). Was
+  the last user of yfinance in this codebase.
+- `scripts/local/coverage_monitor/check.py` — earnings-date lookup removed
+  2026-09-10. Coverage monitor now displays "TBD (watching for
+  announcement 8-K)" until the SEC filing appears and the analyst pulls
+  the date from the company's own press release.
+
+If a future job needs prices, use Alpaca. If it needs earnings dates, use
+the SEC filing (the company files an 8-K when it announces its earnings
+date) plus the company's own press release / IR page. Do NOT reintroduce
+yfinance — the blast radius has been reduced to zero on purpose.
+
 ## Deployment
 
 The `out/` folder is a fully static site. Deploy anywhere:

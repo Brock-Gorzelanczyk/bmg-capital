@@ -1,10 +1,13 @@
 # Coverage Monitor
 
 A daily job that runs against the vault, checks EDGAR for new filings on
-every covered ticker, checks yfinance for next earnings dates, and flags
-"company X filed, your thesis has not been updated in N days."
+every covered ticker, and flags "company X filed, your thesis has not been
+updated in N days." Alerts split into two tiers (parallel to the invariant
+engine's safety-vs-reporting split): SAFETY alerts individually (10-K/Q,
+8-K, 13D/G, S-1/3, 424B, DEF 14A, Form 4 open-market purchase, insider
+selling cluster, stale thesis) and REPORTING roll up (routine Form 4s).
 
-Zero marginal cost — SEC EDGAR (free, canonical) and yfinance (free).
+Zero marginal cost — SEC EDGAR only.
 
 ## What it does
 
@@ -18,17 +21,50 @@ BMG v2 frontmatter — `ticker`, `direction`, `published_price`):
 3. Fetches recent filings from `data.sec.gov/submissions/CIK{padded}.json`.
    Only tracks material filing types: 10-K, 10-Q, 8-K, S-1/3, 424B, DEF 14A,
    13D/G, Form 4.
-4. Fetches next earnings date from `yfinance.Ticker(symbol).calendar`.
+4. Parses Form 4 XML for open-market purchases (code=P) and insider selling
+   clusters (3+ distinct insiders, code=S, within a 30-day window,
+   excluding 10b5-1 plans and tax withholding).
 5. Compares filings against `data/state.json` (filings we've seen in prior
    runs). New filings are what raises an alert.
 
-## Alert conditions
+## Alert tiers
 
-- **NEW FILING** — a material filing (10-K/10-Q/8-K/etc.) appeared since
-  the last run.
-- **NEAR EARNINGS** — next earnings date is within 21 days.
+The monitor splits alerts into two tiers so the individual alerts stay
+signal-heavy:
+
+**SAFETY (individual alerts, prominent):**
+- **NEW MATERIAL FILING** — 10-K, 10-Q, 8-K, 13D/G, DEF 14A, S-1/3, 424B
+  appeared since the last run.
+- **INSIDER PURCHASE** — a Form 4 with transaction code P (open-market
+  purchase). Rare, high-signal.
+- **INSIDER SELLING CLUSTER** — 3+ distinct insiders selling (code=S)
+  within a 30-day window, excluding 10b5-1 planned sales and code=F tax
+  withholding.
 - **STALE THESIS** — thesis is more than 60 days old while the call is
   OPEN.
+
+**REPORTING (summary lines, no alerts):**
+- Individual Form 4s from routine vesting, 10b5-1 sales, tax withholding.
+- Filings the monitor has already seen in prior runs.
+- Historical context.
+
+## Why no yfinance earnings date
+
+An earlier draft called `yfinance.Ticker(symbol).calendar` and alerted
+NEAR EARNINGS when the next date was within 21 days. Removed 2026-09-10
+because:
+1. yfinance is an unofficial scraper — the earnings date field has broken
+   more than once and returns silently-wrong data when Yahoo restructures
+   its HTML.
+2. Earnings-date "kill by 2026-10-27" is a calendar-based invalidation.
+   Vault research/001-GATX.md now specifies event-based criteria only
+   ("Q3 2026 EPS below $2.20" — no date). The monitor's job is to watch
+   for the SEC filing when it comes (8-K "Sets Date for..." plus the
+   actual earnings 8-K), not to guess when.
+
+The status line shows "TBD (watching for announcement 8-K)" until an
+8-K sets the date, at which point the analyst reads it and updates the
+note.
 
 ## Output
 
@@ -68,11 +104,29 @@ if we build one later.
   call → the ticker drops from coverage on the next run.
 - **Rate limit**: 100ms sleep between SEC calls (~10 req/sec upper bound
   per SEC access policy). User-Agent set per SEC requirement.
-- **yfinance earnings dates are best-effort.** If the calendar returns
-  nothing, the report shows "unknown" — better than making up a date.
 - **No push notifications built in.** Report goes to stdout + vault. If
   you want a Discord/email nudge on alerts, wrap the script and check the
   exit code.
+
+## yfinance blast radius
+
+`yfinance` is an unofficial Yahoo Finance scraper. Yahoo has broken it
+multiple times without notice, and the fields it exposes (especially
+`.calendar`) sometimes return silently-wrong data.
+
+**Current blast radius in this project:** ZERO as of 2026-09-10.
+
+- `check.py` — was using `yfinance.Ticker(symbol).calendar` for the next
+  earnings date. Removed 2026-09-10. Replaced with an SEC-only workflow:
+  the monitor watches for the "Sets Date for Q_ Earnings Release" 8-K,
+  the earnings-release 8-K itself, and the 10-Q that follows.
+- `scripts/local/bmg_v2_site/daily_prices.py` — was the other yfinance
+  caller. Migrated to Alpaca Market Data v2 (IEX feed on free tier) on
+  2026-09-10.
+
+**Do not reintroduce yfinance.** For prices, use Alpaca. For earnings
+dates, use the SEC 8-K plus the company's own IR page — the company
+files the announcement itself.
 
 ## What this does NOT do
 
