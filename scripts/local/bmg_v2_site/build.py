@@ -178,6 +178,75 @@ def load_all_calls() -> list[Call]:
     return calls
 
 
+@dataclass
+class ResearchNote:
+    """A supporting research note — no call/rating attached, but rendered as a page."""
+    slug: str
+    path: Path
+    title: str
+    body_html: str
+    published_at: str
+
+
+def read_research_note(path: Path) -> ResearchNote | None:
+    """Return a ResearchNote if the file has `document_type: research` frontmatter
+    but is NOT a v2 call (no ticker/direction/published_price fields).
+    """
+    text = path.read_text(encoding="utf-8")
+    m = re.match(r"^---\n(.*?)\n---\n(.*)$", text, re.DOTALL)
+    if not m:
+        return None
+    front_raw, body = m.group(1), m.group(2)
+    try:
+        fm = yaml.safe_load(front_raw) or {}
+    except yaml.YAMLError:
+        return None
+    if not isinstance(fm, dict):
+        return None
+    # Must declare document_type: research
+    if str(fm.get("document_type", "")).lower() != "research":
+        return None
+    # Skip if it's already picked up as a v2 call
+    if all(k in fm for k in ("ticker", "direction", "published_price")):
+        return None
+    md = markdown.Markdown(extensions=["fenced_code", "tables", "toc"])
+    body_html = md.convert(body)
+    # Prefer explicit `title` from frontmatter, else derive from filename
+    title = fm.get("title") or path.stem.replace("-", " ")
+    published_at = ""
+    try:
+        cmd = ["git", "-C", str(VAULT), "log", "--diff-filter=A", "--follow",
+               "--format=%aI", "--", str(path.relative_to(VAULT))]
+        out = subprocess.check_output(cmd, text=True, stderr=subprocess.DEVNULL).strip()
+        if out:
+            ts = out.splitlines()[-1]
+            published_at = datetime.fromisoformat(ts.replace("Z", "+00:00")).date().isoformat()
+    except Exception:
+        published_at = date.fromtimestamp(path.stat().st_mtime).isoformat()
+    return ResearchNote(
+        slug=path.stem,
+        path=path,
+        title=str(title),
+        body_html=body_html,
+        published_at=published_at,
+    )
+
+
+def load_all_research_notes() -> list[ResearchNote]:
+    notes = []
+    for path in sorted(NOTES_DIR.rglob("*.md")):
+        # Skip sources files and files in subdirectories like coverage/
+        if path.name.endswith("-sources.md"):
+            continue
+        if path.parent != NOTES_DIR:
+            continue
+        n = read_research_note(path)
+        if n:
+            notes.append(n)
+    notes.sort(key=lambda n: n.published_at)
+    return notes
+
+
 def load_prices() -> dict:
     """Load data/prices.json produced by daily_prices.py. Missing = empty."""
     p = DATA_DIR / "prices.json"
@@ -235,6 +304,7 @@ def build(serve: bool = False) -> int:
     env.globals["zip"] = zip
 
     calls = load_all_calls()
+    research_notes = load_all_research_notes()
     prices = load_prices()
     outcomes = compute_outcomes(calls, prices)
 
@@ -261,7 +331,8 @@ def build(serve: bool = False) -> int:
            calls_total=len(calls), open_count=len(open_calls),
            closed_count=len(closed_calls))
     # 2. Research library
-    render(env, "library.html", OUT_DIR / "library.html", outcomes=outcomes)
+    render(env, "library.html", OUT_DIR / "library.html",
+           outcomes=outcomes, research_notes=research_notes)
     # 3. Track record
     render(env, "track_record.html", OUT_DIR / "track-record.html",
            outcomes=outcomes,
@@ -282,7 +353,35 @@ def build(serve: bool = False) -> int:
         render(env, "note.html", OUT_DIR / "calls" / f"{o['call'].slug}.html",
                call=o["call"], outcome=o)
 
-    print(f"[build] output at {OUT_DIR}/")
+    # 6. Per-research-note rendered pages (supporting research context)
+    (OUT_DIR / "research").mkdir(exist_ok=True)
+    for n in research_notes:
+        render(env, "research_note.html", OUT_DIR / "research" / f"{n.slug}.html",
+               note=n)
+
+    # 7. Base-path rewrite for GitHub Pages project deployment.
+    # Templates author internal links as absolute paths ("/style.css"). When
+    # hosted at github.io/bmg-capital-site/ the leading "/" resolves to the
+    # domain root, not the project subpath. If SITE_BASE_PATH env var is set,
+    # prepend it to every leading-slash internal link in every built .html.
+    import os as _os
+    base = _os.environ.get("SITE_BASE_PATH", "").strip().rstrip("/")
+    if base:
+        # Prefix href="/foo" / src="/foo" / onclick="location.href='/foo" with
+        # the base, but skip external (//, http, mailto:).
+        href_re = re.compile(r'((?:href|src)=")(/)([^/"])')
+        onclick_re = re.compile(r"(onclick=\"location\.href=')(/)([^/'])")
+        for html_path in OUT_DIR.rglob("*.html"):
+            txt = html_path.read_text(encoding="utf-8")
+            new = href_re.sub(r'\1' + base + r'/\3', txt)
+            new = onclick_re.sub(r'\1' + base + r'/\3', new)
+            # Also handle href="/" → href="{base}/"
+            new = new.replace('href="/"', f'href="{base}/"')
+            if new != txt:
+                html_path.write_text(new, encoding="utf-8")
+        print(f"[build] applied SITE_BASE_PATH={base} to internal links")
+
+    print(f"[build] output at {OUT_DIR}/  ({len(calls)} calls, {len(research_notes)} research notes)")
 
     if serve:
         os_chdir = __import__("os").chdir

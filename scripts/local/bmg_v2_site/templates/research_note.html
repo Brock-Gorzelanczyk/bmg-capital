@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}{{ note.title }}{% endblock %}
+{% block content %}
+<article class="note">
+  <header class="note-header">
+    <p class="crumb"><a href="/library.html">← Library</a></p>
+    <h1>{{ note.title }}</h1>
+    <p class="thesis-hero">Supporting research note — the analytical backdrop referenced by the published calls. Not a rating, not a target.</p>
+    <dl class="fact-grid">
+      <dt>Published</dt><dd>{{ note.published_at }}</dd>
+      <dt>Type</dt><dd>Research context</dd>
+    </dl>
+  </header>
+  <div class="note-body">
+    {{ note.body_html|safe }}
+  </div>
+</article>
+{% endblock %}

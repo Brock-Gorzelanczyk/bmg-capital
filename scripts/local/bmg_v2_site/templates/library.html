@@ -37,4 +37,25 @@
     {% endif %}
   </tbody>
 </table>
+
+{% if research_notes and research_notes|length > 0 %}
+<h2 style="margin-top: 40px;">Supporting research</h2>
+<p class="page-lede">Analytical backdrop referenced by the calls above.</p>
+<table class="calls-table">
+  <thead>
+    <tr>
+      <th>Published</th>
+      <th>Title</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for n in research_notes %}
+    <tr onclick="location.href='/research/{{ n.slug }}.html'">
+      <td>{{ n.published_at }}</td>
+      <td class="thesis-cell"><a href="/research/{{ n.slug }}.html">{{ n.title }}</a></td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
 {% endblock %}

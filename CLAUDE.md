@@ -8,7 +8,13 @@ Before any work on BMG Capital, read the Obsidian vault at:
 Content without triggers is dead weight. Every time-cost of reading a file is only justified when the specific event happens. Below is the trigger table. Deviation is a bug.
 
 ### SESSION START
-Read `/state/current.md` **before doing anything else**. Report open calls and what is blocked in **one short paragraph**, then ask what we are working on. Do NOT skim CLAUDE.md and stop — the state file is the point.
+Read `/state/current.md` **before doing anything else**. Then immediately run:
+```
+python3 ~/my-new-project/scripts/local/state_staleness.py
+```
+If it exits 1, state is out of date relative to committed or uncommitted changes in `research/`, `drafts/`, or `scripts/`. Report which files/commits are newer and offer to rebuild state from the diff before doing any new work. Do not proceed to new work on stale state. If it exits 0, state is current — proceed.
+
+Report open calls and what is blocked in **one short paragraph**, then ask what we are working on. Do NOT skim CLAUDE.md and stop — the state file is the point.
 
 Also apply §V1: read `context/05-known-issues.md` and state the top 3 OPEN issues by severity. If the requested task is lower priority than an open P0, say so before starting.
 
@@ -17,6 +23,20 @@ Also apply §V1: read `context/05-known-issues.md` and state the top 3 OPEN issu
 
 ### BEFORE writing or revising any research note
 Read `/research/coverage/<sector>/` for that name in full. Read `/research/coverage/rail/falsified.md` in full (regardless of sector — it is the general falsified ledger while we have only one). **If a claim you are about to make appears in `falsified.md`, stop and say so.** Rebuild the argument from primary sources. Do not paraphrase around a falsified claim.
+
+### CANONICAL SOURCE vs PRESENTATION LAYER (added 2026-09-12)
+
+For every open research call, TWO artifacts can exist:
+
+1. **The vault markdown at `~/Documents/BMG-Capital-Vault/research/NNN-TICKER.md`** — the canonical source. This is what `scripts/vault_ship_gate.sh` checks against `scripts/vault_provenance_check.py` and `scripts/local/falsified_audit.py`. It is what the site build (`scripts/local/bmg_v2_site/build.py`) reads and renders into HTML pages. It is what the frontmatter drives (track record, kill criteria, benchmarks).
+
+2. **A designed one-pager HTML** (e.g., `.../local-agent-mode-sessions/.../GATX-one-pager-v5.html`) — the presentation layer. This is the client-facing PDF/print layout. It has NO gate coverage: it is not checked by provenance, not scanned for falsified claims, and never read by the site build.
+
+**Rule:** the vault markdown is canonical. Every quantitative claim goes there FIRST with an inline marker and a matching row in the companion `-sources.md` file. Only after the ship gate exits 0 does anything change in the presentation HTML. **Never hand-edit the HTML and the markdown separately.**
+
+The one-pager HTML is a downstream render of the markdown, in the same way the site's `out/calls/NNN-TICKER.html` is. If the two ever diverge, the markdown wins and the HTML is regenerated. The 2026-09-12 reconciliation of `001-GATX.md` to the v5 HTML (where the frontmatter had been updated but the body was still v1) exists exactly because this rule was not in force during the 2026-09-11 revision — the frontmatter got updated in-place while the body drifted from what the client-facing HTML was actually saying.
+
+**Test:** if you find yourself editing a research one-pager HTML file directly, stop. Edit the markdown, ship-gate it, then regenerate the HTML from the markdown.
 
 ### BEFORE asserting what a company does, does not do, or is exposed to
 **Rule S1 applies.** Cite that company's OWN segment / fleet / revenue-mix disclosure. Peer characterisations, industry aggregates, and derived shares do NOT satisfy it. Before going to the filings, check whether the `/research/coverage/<sector>/` subject notes already contain the disclosed figure with an inline marker.
@@ -34,11 +54,26 @@ Check `/reference/quant-stack/` first. If the tool is covered, use the vault's d
 Write the postmortem in `/postmortems/YYYY-MM-DD-slug.md` **before** doing anything else. Five lines minimum: what happened, root cause, how long undetected, what detected it, what prevents it now. **If a claim was disproved, add it to `/research/coverage/rail/falsified.md`** (or the appropriate falsified.md when we have more than one). "Be more careful" is not a prevention (§V8).
 
 ### AFTER shipping any research deliverable with quantitative claims
-Rules 1-9 apply. Companion `-sources.md` file must exist. Run:
+Rules 1-9 apply. Companion `-sources.md` file must exist. Run the ship gate:
 ```
-python3 ~/my-new-project/scripts/vault_provenance_check.py <note.md>
+scripts/vault_ship_gate.sh <note.md>
 ```
-Exit 0 or the note is not shippable. There is no path where nonzero exit is explained and the work is declared complete.
+This runs BOTH `vault_provenance_check.py` (marker-to-sources set equality — Rule 7) AND `falsified_audit.py` (scans the note against every `<!-- audit-patterns -->` block in `research/coverage/*/falsified.md` — flags any surviving falsified claim). Exit 0 or the note is not shippable. There is no path where nonzero exit is explained and the work is declared complete.
+
+For screens built on provider exports, also run `scripts/screen_integrity_check.py <export>` (Rule 9). The wrapper does not call it because the export path is a separate arg.
+
+### WHEN SPAWNING ANY SUB-AGENT FOR RESEARCH OR ANALYSIS
+
+When spawning any sub-agent for research or analysis, the prompt MUST include, verbatim, the COVERAGE block from state/current.md. Sub-agents do not run the session-start sequence and will not find the coverage notes on their own. A sub-agent prompt that asks a factual question about a covered name without that block attached is a defect.
+
+Get the block from a single source — never restate it in prose:
+```
+python3 ~/my-new-project/scripts/local/coverage_block.py
+```
+
+Prepend that output to the sub-agent's prompt. If the sub-agent's task does not touch covered names (pure code refactor, unrelated infra work), the block is optional. If in doubt, attach it — the marginal cost is small; the failure mode (a sub-agent answering GATX/coverage questions from prior knowledge) is exactly what TEST 2 caught on 2026-09-12.
+
+Reference incident: 2026-09-12 TEST 2 re-run. A fresh sub-agent asked "Is GATX exposed to coal? One paragraph." answered from CLAUDE.md context (citing Rule S1 and FALS-01) without reading `research/coverage/rail/gatx-fleet-composition.md`. Fix per §V8: automate the block-attachment rather than strengthen the CLAUDE.md wording that already failed to reach the sub-agent.
 
 ---
 
@@ -177,10 +212,13 @@ Any research note built on a data-provider EXPORT (FactSet screen, Bloomberg dow
 ### Enforcement pattern (same three-layer as §W1 provenance)
 1. **Rule (this section)** — discipline text.
 2. **Artifact (`-sources.md` + integrity log)** — required companion files per deliverable, with per-row TIER field and inline marker IDs (`[V14]`) in the document.
-3. **Automation** — TWO gates now:
+3. **Automation** — THREE gates now, chained by `scripts/vault_ship_gate.sh`:
    - `scripts/vault_provenance_check.py` — set-equality gate. Every marker in the document must resolve to a row. Every row must be referenced. No BANNED tiers. No unpaired TIER3. Exit 0 or the document is not shippable.
+   - `scripts/local/falsified_audit.py` — falsified-claim gate. Reads every `<!-- audit-patterns -->` block in `research/coverage/*/falsified.md` and refuses to ship a document whose text contains any listed phrase or co-occurrence. When a new falsified claim is added to the ledger with a patterns block, that class becomes enforceable immediately. Reference falsified claims by FALS-NN ID in revision blocks, never quote the toxic phrasing.
    - `scripts/screen_integrity_check.py` — filter-satisfaction gate for provider exports. Exit 0 means the export cleanly satisfies the declared screen. Exit non-zero means the deliverable ships as DRAFT with failures surfaced in-note.
    There is no path where nonzero exit is explained and the work is declared complete.
+
+**Reference incident for `falsified_audit.py` (2026-09-11):** the ledger already listed FALS-01/02/03. Note 002 was CLAIMED to be rebuilt, but its two lead bullets still contained those falsified claims verbatim. A human running a manual grep is what caught it — the discipline of reading falsified.md before writing had failed twice in one session. Per §V8, that failure class becomes automation. The audit closes the gap between "the ledger prevents writing a bad claim" and "the ledger detects a bad claim already sitting in a document."
 
 ## SOURCING DISCIPLINE (added 2026-09-11 — postmortem `postmortems/2026-09-11-note-002-outside-review.md`)
 
