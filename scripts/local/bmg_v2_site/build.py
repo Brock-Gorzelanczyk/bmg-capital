@@ -142,6 +142,18 @@ def read_note(path: Path) -> Call | None:
     # Get git commit metadata for this specific file
     _fill_git_metadata(call)
 
+    # Frontmatter published_at wins over git-derived date. Reason: the git
+    # ADD-commit date is when the file first entered the repo, which for a
+    # revised or backfilled call is NOT the call's true ship date. Both
+    # legs of excess return (call and benchmark) must anchor to the same
+    # date (Rule 3 basis consistency), and the benchmark fetch in
+    # daily_prices.py reads from frontmatter — so the render must too.
+    fm_pub = fm.get("published_at")
+    if fm_pub:
+        if not isinstance(fm_pub, str):
+            fm_pub = fm_pub.isoformat()
+        call.published_at = fm_pub
+
     return call
 
 
@@ -306,6 +318,49 @@ def build(serve: bool = False) -> int:
     calls = load_all_calls()
     research_notes = load_all_research_notes()
     prices = load_prices()
+
+    # Rule 3 basis-consistency assertion.
+    # For every call, the benchmark historical price MUST be keyed at the
+    # SAME date as the call's published_at. Otherwise the excess-return
+    # calculation compares (call today vs entry_on_date_X) against
+    # (bench today vs bench_on_date_Y) — a Rule 3 basis mismatch on the
+    # headline number of the track record. First live example caught
+    # 2026-09-12 (see /research/coverage/rail/001-GATX-review-log-2026-09-12.md).
+    #
+    # This check fails the build if:
+    #   (a) benchmark ticker has no entry in prices.json
+    #   (b) benchmark has no historical price for call.published_at
+    # The daily_prices.py job fetches historical prices keyed by each call's
+    # published_at, so a mismatch here means either published_at changed
+    # since the last price run OR the price job failed silently for that
+    # date. In either case the correct response is to re-run daily_prices.py,
+    # not to publish a wrong-basis excess-return number.
+    if prices.get("prices"):  # only enforce when we actually have prices
+        errors = []
+        for c in calls:
+            if c.status != "OPEN" and c.closed_price is not None:
+                continue  # closed calls have a closed_price; benchmark date less critical
+            bench_data = prices["prices"].get(c.benchmark)
+            if bench_data is None:
+                errors.append(
+                    f"call {c.slug}: benchmark '{c.benchmark}' has no entry in prices.json"
+                )
+                continue
+            hist = bench_data.get("historical", {}) or {}
+            if c.published_at not in hist:
+                errors.append(
+                    f"call {c.slug}: benchmark '{c.benchmark}' has no historical price "
+                    f"for {c.published_at} (call published date). "
+                    f"Present dates: {sorted(hist.keys()) or '[]'}. "
+                    "Rule 3 basis mismatch — refuse to build. Re-run daily_prices.py."
+                )
+        if errors:
+            print("[fail] benchmark-date basis check FAILED:", file=sys.stderr)
+            for e in errors:
+                print(f"       {e}", file=sys.stderr)
+            print("       build aborted.", file=sys.stderr)
+            return 2
+
     outcomes = compute_outcomes(calls, prices)
 
     open_calls = [o for o in outcomes if o["call"].status == "OPEN"]
