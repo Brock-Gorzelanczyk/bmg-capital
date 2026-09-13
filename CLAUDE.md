@@ -16,6 +16,8 @@ If it exits 1, state is out of date relative to committed or uncommitted changes
 
 Report open calls and what is blocked in **one short paragraph**, then ask what we are working on. Do NOT skim CLAUDE.md and stop — the state file is the point.
 
+**The state file embeds two auto-generated blocks:** the COVERAGE block (`<!-- coverage-auto-start … coverage-auto-end -->`) enumerates covered names by sector, and the METHOD block (`<!-- method-auto-start … method-auto-end -->`) enumerates the rules in `/reference/method/M01…M07.md`. Both are refreshed by `scripts/local/state_current_regen.py` (which is invoked automatically by `scripts/vault_ship_gate.sh`). **Read both when opening state — the method layer is how yesterday's mistakes stay closed today.**
+
 Also apply §V1: read `context/05-known-issues.md` and state the top 3 OPEN issues by severity. If the requested task is lower priority than an open P0, say so before starting.
 
 ### SESSION END, or when the human says we are done
@@ -58,7 +60,14 @@ Rules 1-9 apply. Companion `-sources.md` file must exist. Run the ship gate:
 ```
 scripts/vault_ship_gate.sh <note.md>
 ```
-This runs BOTH `vault_provenance_check.py` (marker-to-sources set equality — Rule 7) AND `falsified_audit.py` (scans the note against every `<!-- audit-patterns -->` block in `research/coverage/*/falsified.md` — flags any surviving falsified claim). Exit 0 or the note is not shippable. There is no path where nonzero exit is explained and the work is declared complete.
+This runs three gates in sequence, then rewrites and commits state:
+1. `vault_provenance_check.py` — marker-to-sources set equality (Rule 7)
+2. `falsified_audit.py` — scans against every `<!-- audit-patterns -->` block in `research/coverage/*/falsified.md`
+3. `derivation_check.py` — safe-evaluates every row's expression from the `## Derivations` table in the sources file against its stated value + tolerance (closes the arithmetic-on-sourced-inputs class caught 2026-09-12)
+
+Exit 0 across all three or the note is not shippable. There is no path where nonzero exit is explained and the work is declared complete.
+
+**Method-layer contribution.** At ship time, every research note must add at least one new entry to `/reference/method/M##.md` OR record explicitly in its own body that the work produced no generalisable rule. Rules are actions, not observations — see `/reference/method/00-index.md` for the standing rule and format. The method block in `state/current.md` refreshes automatically on ship gate pass; a missing contribution is itself a discipline violation to note in the postmortem.
 
 For screens built on provider exports, also run `scripts/screen_integrity_check.py <export>` (Rule 9). The wrapper does not call it because the export path is a separate arg.
 
