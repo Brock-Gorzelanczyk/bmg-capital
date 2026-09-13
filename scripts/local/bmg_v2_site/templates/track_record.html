@@ -30,6 +30,7 @@
     <tr>
       <th>#</th>
       <th>Ticker</th>
+      <th>Pos</th>
       <th>Published</th>
       <th>Entry</th>
       <th>Target</th>
@@ -49,6 +50,7 @@
     <tr onclick="location.href='/calls/{{ c.slug }}.html'">
       <td>{{ loop.index }}</td>
       <td class="ticker">{{ c.ticker }}</td>
+      <td class="position position-{{ c.position }}">{{ c.position }}</td>
       <td>{{ c.published_at }}</td>
       <td>${{ '%.2f'|format(c.published_price) }}</td>
       <td>{% if c.price_target %}${{ '%.2f'|format(c.price_target) }}{% else %}—{% endif %}</td>

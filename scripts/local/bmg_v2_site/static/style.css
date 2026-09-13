@@ -201,3 +201,15 @@ footer {
 .kill-never   { color: #666;    font-style: italic; }
 .kill-stale   { color: #b3261e; font-style: italic; }
 .kill-clear   { color: #0a7d38; }
+
+/* Position disclosure — rendered at top of note page and in track-record row */
+.position-line { margin: 0.5rem 0 1rem; padding: 0.5rem 0.75rem;
+                 border-left: 3px solid var(--line); font-size: 0.95em; }
+.position-line.position-HELD { border-left-color: #b3261e; background: #fff5f4; }
+.position-line.position-FORMERLY_HELD { border-left-color: #c17817; background: #fff9f0; }
+.position-line.position-NONE { border-left-color: #0a7d38; background: #f4faf6; }
+
+td.position { font-family: -apple-system, monospace; font-size: 0.82em; text-align: center; }
+td.position.position-HELD { color: #b3261e; font-weight: 700; }
+td.position.position-FORMERLY_HELD { color: #c17817; }
+td.position.position-NONE { color: #0a7d38; }

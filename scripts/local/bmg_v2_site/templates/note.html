@@ -5,6 +5,7 @@
   <header class="note-header">
     <p class="crumb"><a href="/library.html">← Library</a></p>
     <h1>{{ call.ticker }} — {{ call.direction }} — Target ${{ '%.2f'|format(call.price_target or 0) }}</h1>
+    <p class="position-line position-{{ call.position }}"><strong>Position:</strong> {{ call.position }}{% if call.position_disclosed_since %} (disclosed since {{ call.position_disclosed_since }}){% endif %}</p>
     <p class="thesis-hero">{{ call.thesis }}</p>
 
     {% if call.backfill %}

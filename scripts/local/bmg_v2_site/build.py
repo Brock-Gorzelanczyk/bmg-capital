@@ -63,10 +63,13 @@ STATIC = ROOT / "static"
 DATA_DIR = ROOT / "data"
 
 DISCLAIMER = (
-    "Research published for demonstration purposes by an individual student "
-    "analyst. No capital is deployed against these calls and no positions are "
-    "held. Nothing here is investment advice or a recommendation to buy or "
-    "sell any security."
+    "Research published by an individual analyst for demonstration and "
+    "educational purposes. The analyst may hold positions in some names "
+    "covered here; when so, the position is disclosed at the top of the "
+    "specific note (position: HELD / NONE / FORMERLY_HELD). Position "
+    "disclosure is not a footnote. Nothing here is investment advice or "
+    "a recommendation to buy or sell any security. Independent verification "
+    "against primary sources is required for any decision."
 )
 
 
@@ -94,6 +97,12 @@ class Call:
     commit_hash: str = ""
     commit_short: str = ""
     published_at: str = ""  # ISO date from git commit timestamp
+    # Position disclosure (2026-09-13 addition):
+    # HELD = analyst owns this security; NONE = does not; FORMERLY_HELD =
+    # closed a prior position. Rendered next to the rating on both the
+    # note page and the track record row.
+    position: str = "NONE"
+    position_disclosed_since: str | None = None
 
 
 def read_note(path: Path) -> Call | None:
@@ -133,6 +142,9 @@ def read_note(path: Path) -> Call | None:
         thesis_attribution=fm.get("thesis_attribution"),
         backfill=bool(fm.get("backfill", False)),
         backfill_note=fm.get("backfill_note"),
+        position=str(fm.get("position", "NONE")).upper(),
+        position_disclosed_since=(str(fm["position_disclosed_since"])
+                                   if fm.get("position_disclosed_since") else None),
     )
 
     # Render body markdown (excluding frontmatter)
