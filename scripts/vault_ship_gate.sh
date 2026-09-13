@@ -42,6 +42,30 @@ fi
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 VAULT_ROOT="${VAULT_ROOT:-$HOME/Documents/BMG-Capital-Vault}"
 
+echo "=== Gate 0/4: position disclosure check (M17) ==="
+# Every research note with v2 frontmatter must have position_disclosed_since
+# set to an ISO date, NONE, or UNVERIFIED. Blank or UNVERIFIED fails.
+# Filed 2026-09-13 after ORCL 005 opened coverage on an asserted-but-
+# unverified position. See reference/method/M17.md.
+POS_LINE="$(grep -E '^position_disclosed_since:' "$DOC" | head -1 | sed 's/^position_disclosed_since:[[:space:]]*//' | tr -d '\"' | tr -d "'" | sed 's/[[:space:]]*$//')"
+if [ -z "$POS_LINE" ]; then
+    # Only enforce for notes that also have a position field — coverage /
+    # research helpers without position frontmatter are exempt.
+    if grep -qE '^position:' "$DOC"; then
+        echo "[FAIL] position_disclosed_since is blank — must be ISO date, NONE, or UNVERIFIED (M17)"
+        exit 30
+    fi
+elif [ "$POS_LINE" = "UNVERIFIED" ]; then
+    echo "[FAIL] position_disclosed_since is UNVERIFIED — brokerage-record check required before ship (M17)"
+    exit 30
+elif [ "$POS_LINE" = "TBD-BROCK-TO-CONFIRM" ]; then
+    echo "[FAIL] position_disclosed_since is a placeholder — replace with ISO date or NONE per M17 verification"
+    exit 30
+else
+    echo "[ok]   position_disclosed_since = $POS_LINE"
+fi
+echo
+
 echo "=== Gate 1/4: provenance check (marker set equality) ==="
 python3 "$REPO_ROOT/scripts/vault_provenance_check.py" "$DOC"
 GATE1=$?
