@@ -62,7 +62,7 @@
         {% if o.excess_pct is not none %}{{ '%+.1f'|format(o.excess_pct) }}%{% else %}—{% endif %}
       </td>
       <td>{{ c.conviction }}/5</td>
-      <td>{{ c.kill_criteria|length }}</td>
+      <td class="{% if o.kill.counts.get('FIRED') %}kill-fired{% elif o.kill.counts.get('PENDING') %}kill-pending{% elif o.kill.counts.get('NEVER_EVALUATED') %}kill-never{% elif o.kill.counts.get('STALE') %}kill-stale{% else %}kill-clear{% endif %}">{{ o.kill.headline }}</td>
       <td><span class="status status-{{ c.status }}">{{ c.status }}</span></td>
     </tr>
   {% endfor %}

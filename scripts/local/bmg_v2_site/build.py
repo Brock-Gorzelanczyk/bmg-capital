@@ -267,9 +267,49 @@ def load_prices() -> dict:
     return json.loads(p.read_text())
 
 
-def compute_outcomes(calls: list[Call], prices: dict) -> list[dict]:
+def load_kill_ledger() -> dict:
+    """Load the kill-criteria ledger from the vault (state/kill_criteria_ledger.json).
+    Missing = empty dict; callers must handle 'no data known' explicitly.
+    """
+    p = VAULT / "state" / "kill_criteria_ledger.json"
+    if not p.exists():
+        return {}
+    try:
+        return json.loads(p.read_text())
+    except json.JSONDecodeError:
+        return {}
+
+
+def summarize_kill(kill_ledger: dict, slug: str) -> dict:
+    """Return {'total': N, 'counts': {STATUS: N}, 'headline': 'X clear' | ...}
+    Headline priority: FIRED > PENDING > STALE > NEVER_EVALUATED > CLEAR.
+    """
+    entries = kill_ledger.get(slug, {})
+    if not entries:
+        return {"total": 0, "counts": {}, "headline": "no kill criteria"}
+    counts: dict[str, int] = {}
+    for cid, row in entries.items():
+        s = row.get("status", "NEVER_EVALUATED")
+        counts[s] = counts.get(s, 0) + 1
+    total = sum(counts.values())
+    # Headline
+    if counts.get("FIRED"):
+        headline = f"{counts['FIRED']} FIRED / {total}"
+    elif counts.get("PENDING"):
+        headline = f"{counts['PENDING']} pending / {total}"
+    elif counts.get("STALE"):
+        headline = f"{counts['STALE']} stale / {total}"
+    elif counts.get("NEVER_EVALUATED"):
+        headline = f"{counts.get('CLEAR', 0)} clear + {counts['NEVER_EVALUATED']} never evaluated / {total}"
+    else:
+        headline = f"{counts.get('CLEAR', 0)} clear / {total}"
+    return {"total": total, "counts": counts, "headline": headline}
+
+
+def compute_outcomes(calls: list[Call], prices: dict, kill_ledger: dict | None = None) -> list[dict]:
     """Return per-call outcome dicts for the track-record table."""
     px = prices.get("prices", {})
+    kill_ledger = kill_ledger or {}
     outcomes = []
     for c in calls:
         latest = px.get(c.ticker, {}).get("last")
@@ -289,6 +329,7 @@ def compute_outcomes(calls: list[Call], prices: dict) -> list[dict]:
             "return_pct": r_call,
             "benchmark_return_pct": r_bench,
             "excess_pct": excess,
+            "kill": summarize_kill(kill_ledger, c.slug),
         })
     return outcomes
 
@@ -318,6 +359,7 @@ def build(serve: bool = False) -> int:
     calls = load_all_calls()
     research_notes = load_all_research_notes()
     prices = load_prices()
+    kill_ledger = load_kill_ledger()
 
     # Rule 3 basis-consistency assertion.
     # For every call, the benchmark historical price MUST be keyed at the
@@ -361,7 +403,7 @@ def build(serve: bool = False) -> int:
             print("       build aborted.", file=sys.stderr)
             return 2
 
-    outcomes = compute_outcomes(calls, prices)
+    outcomes = compute_outcomes(calls, prices, kill_ledger)
 
     open_calls = [o for o in outcomes if o["call"].status == "OPEN"]
     closed_calls = [o for o in outcomes if o["call"].status != "OPEN"]

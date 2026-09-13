@@ -431,11 +431,32 @@ def build_report(tickers: list[Ticker]) -> tuple[str, list[str]]:
             per_ticker_summary_lines[t.symbol] = insider_summary
             continue
         # Safety-tier filing alerts (open-call tickers only)
+        earnings_filing_seen = False
         for f in t.new_filings:
             if f["form"] in SAFETY_FORMS:
                 alerts.append(f"NEW {f['form']}: {t.symbol} filed on {f['filed']} — "
                               f"thesis last updated {t.last_update_days} days ago "
                               f"({t.last_update_at})")
+            if f["form"] in ("10-K", "10-Q", "8-K"):
+                # An earnings-adjacent filing appeared. Flip judgement kill
+                # criteria for this ticker to PENDING so they can't pass
+                # silently. Individual 8-Ks may not always be earnings, but
+                # we err toward requiring evaluation rather than skipping —
+                # per the kill-criteria-check discipline, silence never
+                # counts as a pass.
+                earnings_filing_seen = True
+        if earnings_filing_seen:
+            try:
+                subprocess.run(
+                    ["python3", str(ROOT.parent / "kill_criteria_check.py"),
+                     "--simulate-earnings", t.symbol],
+                    capture_output=True, text=True, timeout=30,
+                )
+                alerts.append(f"KILL CRITERIA: earnings-adjacent filing on {t.symbol} — "
+                              f"judgement criteria flipped to PENDING (require human verdict "
+                              f"via --record-verdict)")
+            except Exception as e:
+                alerts.append(f"KILL CRITERIA: could not trigger PENDING flip for {t.symbol}: {e}")
         # Insider (Form 4) alerts + summary
         insider_alerts, insider_summary = summarize_insider_activity(t)
         alerts.extend(insider_alerts)
@@ -446,6 +467,28 @@ def build_report(tickers: list[Ticker]) -> tuple[str, list[str]]:
                           f"days ago ({t.last_update_at})")
 
     lines = [f"# Coverage Status — {today}", ""]
+
+    # KILL CRITERIA section — invoked as a subprocess so kill_criteria_check.py
+    # stays independently runnable. Prepended above alerts so a FIRED kill
+    # criterion is the first thing a reader sees.
+    try:
+        kc = subprocess.run(
+            ["python3", str(ROOT.parent / "kill_criteria_check.py"), "--section-only"],
+            capture_output=True, text=True, timeout=30,
+        )
+        if kc.stdout:
+            lines.append(kc.stdout.strip())
+            lines.append("")
+        if kc.returncode == 2:
+            alerts.append("KILL CRITERION FIRED — see KILL CRITERIA section above")
+        elif kc.returncode == 1:
+            # PENDING or NEVER_EVALUATED — surface as reminder, not alert
+            lines.append("_(kill_criteria_check exited 1: at least one criterion needs attention)_")
+            lines.append("")
+    except Exception as e:
+        lines.append(f"_(kill_criteria_check failed to run: {e})_")
+        lines.append("")
+
     if alerts:
         lines.append(f"## ALERTS ({len(alerts)})")
         lines.append("")
