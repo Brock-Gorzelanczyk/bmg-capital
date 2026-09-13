@@ -157,6 +157,17 @@ def read_note(path: Path) -> Call | None:
     return call
 
 
+def _git_add_date(path: Path) -> str:
+    """Return the ISO date of the git ADD-commit that first introduced this
+    file. Used by the backdating assertion in build().
+    """
+    cmd = ["git", "-C", str(VAULT), "log", "--diff-filter=A", "--follow",
+           "--format=%aI", "--", str(path.relative_to(VAULT))]
+    out = subprocess.check_output(cmd, text=True, stderr=subprocess.DEVNULL).strip()
+    ts = out.splitlines()[-1]  # first ADD commit is the LAST line
+    return datetime.fromisoformat(ts.replace("Z", "+00:00")).date().isoformat()
+
+
 def _fill_git_metadata(call: Call) -> None:
     """Populate commit_hash, commit_short, published_at from git history."""
     try:
@@ -360,6 +371,47 @@ def build(serve: bool = False) -> int:
     research_notes = load_all_research_notes()
     prices = load_prices()
     kill_ledger = load_kill_ledger()
+
+    # Backdating assertion (added 2026-09-13 after TRN was shipped with
+    # published_at 2026-09-10 while the file's git ADD-commit was
+    # 2026-09-13, producing a phantom -0.8% excess on a call that had
+    # been live for less than an hour).
+    # Rule: published_at may not precede the git ADD-commit date of the
+    # note by more than MAX_BACKDATE_DAYS (default 1 — allows weekend/
+    # holiday publish anchored to previous Friday's close, forbids
+    # "wrote today, dated three days ago").
+    # MAX_BACKDATE_DAYS = 2 permits a Sunday publish anchored to the previous
+    # Friday close, PLUS a one-day tolerance for data-feed lag (Alpaca IEX free
+    # tier sometimes trails by ~24h). Anything beyond that is real backdating.
+    MAX_BACKDATE_DAYS = 2
+    from datetime import timedelta as _td
+    if calls:
+        backdate_errors = []
+        for c in calls:
+            if not c.commit_hash or c.commit_hash == "(uncommitted)":
+                continue  # can't check pre-commit
+            try:
+                commit_date = date.fromisoformat(_git_add_date(c.path))
+                pub_date = date.fromisoformat(c.published_at)
+            except Exception:
+                continue
+            allowed_earliest = commit_date - _td(days=MAX_BACKDATE_DAYS)
+            if pub_date < allowed_earliest:
+                backdate_errors.append(
+                    f"call {c.slug}: published_at {c.published_at} is "
+                    f"{(commit_date - pub_date).days} days before git ADD-commit "
+                    f"{commit_date.isoformat()} (max backdate allowed: "
+                    f"{MAX_BACKDATE_DAYS} days). A call cannot be entered at a "
+                    f"price from before the note existed — the excess-return "
+                    f"calculation will show phantom movement over the "
+                    f"backdated window."
+                )
+        if backdate_errors:
+            print("[fail] backdating check FAILED:", file=sys.stderr)
+            for e in backdate_errors:
+                print(f"       {e}", file=sys.stderr)
+            print("       build aborted.", file=sys.stderr)
+            return 2
 
     # Rule 3 basis-consistency assertion.
     # For every call, the benchmark historical price MUST be keyed at the

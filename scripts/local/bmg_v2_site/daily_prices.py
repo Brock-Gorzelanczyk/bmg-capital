@@ -101,7 +101,7 @@ def fetch_latest_close(symbol: str, headers: dict) -> float | None:
     r = requests.get(url, headers=headers, params=params, timeout=30)
     if r.status_code != 200:
         return None
-    bars = r.json().get("bars", [])
+    bars = r.json().get("bars") or []   # Alpaca returns null (not []) when empty
     if not bars:
         return None
     # Walk backwards from the most recent bar until we find a valid close
@@ -121,7 +121,7 @@ def fetch_close_on_or_after(symbol: str, target_date: str, headers: dict) -> flo
     r = requests.get(url, headers=headers, params=params, timeout=30)
     if r.status_code != 200:
         return None
-    bars = r.json().get("bars", [])
+    bars = r.json().get("bars") or []   # Alpaca returns null (not []) when empty
     for b in bars:
         ts = b.get("t", "")[:10]
         if ts >= target_date and b.get("c") is not None:
