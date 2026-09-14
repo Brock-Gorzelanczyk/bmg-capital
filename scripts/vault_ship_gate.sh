@@ -86,12 +86,63 @@ python3 "$REPO_ROOT/scripts/local/derivation_check.py" "$DOC"
 GATE3=$?
 echo
 
-if [ $GATE1 -ne 0 ] || [ $GATE2 -ne 0 ] || [ $GATE3 -ne 0 ]; then
-    echo "[FAIL] ship gate stopped after checks: provenance=$GATE1 falsified_audit=$GATE2 derivation=$GATE3"
+# --- Gate 3.5: per-artifact audit (M19) ---
+# Every path listed under `artifacts:` in the note's frontmatter is a
+# downstream deliverable and must pass the same falsified-claim audit as
+# the source note, plus the artifact_consistency check for
+# headline/table multiple drift. A correction applied to the source note
+# is not propagated until the downstream artifact re-passes.
+#
+# Frontmatter form:
+#   artifacts:
+#     - deliverables/foo/foo-one-pager.html
+#     - deliverables/foo/foo-deck.pdf
+# Paths are relative to $VAULT_ROOT.
+#
+# Filed 2026-09-13 after GATX one-pager v5 carried FALS-02, FALS-04, and
+# a 20x/17.8x multiple drift for two days after source-note correction.
+# See reference/method/M19.md.
+
+GATE_ARTIFACTS=0
+ARTIFACT_PATHS="$(awk '
+    /^artifacts:/ { in_arts = 1; next }
+    in_arts && /^  *- / { sub(/^  *- */, ""); print; next }
+    in_arts && /^[^ ]/ { in_arts = 0 }
+' "$DOC")"
+
+if [ -n "$ARTIFACT_PATHS" ]; then
+    echo "=== Gate 3.5/4: downstream artifact audit (M19) ==="
+    while IFS= read -r rel_path; do
+        [ -z "$rel_path" ] && continue
+        abs_path="$VAULT_ROOT/$rel_path"
+        if [ ! -f "$abs_path" ]; then
+            echo "[fail] artifact registered in frontmatter not found: $rel_path"
+            GATE_ARTIFACTS=2
+            continue
+        fi
+        echo "  --- artifact: $rel_path"
+        python3 "$REPO_ROOT/scripts/local/falsified_audit.py" "$abs_path"
+        A_FALS=$?
+        python3 "$REPO_ROOT/scripts/local/artifact_consistency.py" "$abs_path" --quiet
+        A_CONS=$?
+        if [ $A_FALS -ne 0 ] || [ $A_CONS -ne 0 ]; then
+            echo "[fail] artifact $rel_path failed: falsified_audit=$A_FALS consistency=$A_CONS"
+            GATE_ARTIFACTS=2
+        fi
+    done <<< "$ARTIFACT_PATHS"
+    if [ $GATE_ARTIFACTS -eq 0 ]; then
+        echo "[ok]   all registered artifacts passed falsified_audit + consistency."
+    fi
+    echo
+fi
+
+if [ $GATE1 -ne 0 ] || [ $GATE2 -ne 0 ] || [ $GATE3 -ne 0 ] || [ $GATE_ARTIFACTS -ne 0 ]; then
+    echo "[FAIL] ship gate stopped after checks: provenance=$GATE1 falsified_audit=$GATE2 derivation=$GATE3 artifacts=$GATE_ARTIFACTS"
     echo "       state/current.md NOT rewritten — document is not shippable."
     if [ $GATE1 -ne 0 ]; then exit $GATE1; fi
     if [ $GATE2 -ne 0 ]; then exit $GATE2; fi
-    exit $GATE3
+    if [ $GATE3 -ne 0 ]; then exit $GATE3; fi
+    exit $GATE_ARTIFACTS
 fi
 
 # --- Stage 3: rewrite state/current.md ---------------------------------
