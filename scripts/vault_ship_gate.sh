@@ -61,7 +61,12 @@ elif [ "$POS_LINE" = "UNVERIFIED" ]; then
 elif [ "$POS_LINE" = "TBD-BROCK-TO-CONFIRM" ]; then
     echo "[FAIL] position_disclosed_since is a placeholder — replace with ISO date or NONE per M17 verification"
     exit 30
+elif echo "$POS_LINE" | grep -qE '^TBD|^PENDING$|^UNKNOWN$'; then
+    echo "[FAIL] position_disclosed_since is a placeholder ($POS_LINE) — replace with ISO date, NONE, or UNVERIFIED per M17"
+    exit 30
 else
+    # Accepts ISO date (past OR future — future dates paired with
+    # position: OPENING per M17 for queued-order publications).
     echo "[ok]   position_disclosed_since = $POS_LINE"
 fi
 echo
