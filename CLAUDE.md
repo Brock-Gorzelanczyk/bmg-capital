@@ -8,11 +8,18 @@ Before any work on BMG Capital, read the Obsidian vault at:
 Content without triggers is dead weight. Every time-cost of reading a file is only justified when the specific event happens. Below is the trigger table. Deviation is a bug.
 
 ### SESSION START
-Read `/state/current.md` **before doing anything else**. Then immediately run:
+Read `/state/current.md` **before doing anything else**. Then immediately run, in order:
 ```
 python3 ~/my-new-project/scripts/local/state_staleness.py
+python3 ~/my-new-project/scripts/local/calibration_due.py
+python3 ~/my-new-project/scripts/local/monitoring_due.py
 ```
-If it exits 1, state is out of date relative to committed or uncommitted changes in `research/`, `drafts/`, or `scripts/`. Report which files/commits are newer and offer to rebuild state from the diff before doing any new work. Do not proceed to new work on stale state. If it exits 0, state is current — proceed.
+
+- **state_staleness.py.** Exits 1 if state is out of date relative to committed or uncommitted changes in `research/`, `drafts/`, or `scripts/`. Report which files/commits are newer and offer to rebuild state from the diff before doing any new work.
+- **calibration_due.py** (M22). Exits 1 if any rated call is at or past its evaluation date without a committed evaluation, or if any open call is missing quarterly interim marks.
+- **monitoring_due.py** (M24). Exits 1 if any of: (A) open work-order in `monitoring/WORK-ORDERS.md` awaits evaluation; (B) an expected event date has passed with no corresponding filing detected; (C) an unverified expected date is inside 30 days; (D) any PENDING status has sat >14 days without evaluation; (E) `monitor_filings.py` last ran >7 days ago. Session start is the primary trigger — a cron or launchd job may supplement but not replace it.
+
+Do not proceed to new work while any of the three exits 1 without acknowledging what fired and why. If all three exit 0, state is current — proceed.
 
 Report open calls and what is blocked in **one short paragraph**, then ask what we are working on. Do NOT skim CLAUDE.md and stop — the state file is the point.
 
@@ -248,6 +255,16 @@ Any sentence that compares two companies' metrics (renewal rates, utilization, m
 Failure mode this closes: FALS-02 and FALS-03 (2026-09-11) compared GATX's LPI (12-month trailing average of realized renewals, backward-looking) to Trinity's FLRD (forward-looking implied rate for the next four quarters). Non-overlapping windows, opposite direction of information. Both definitions were in the source documents being cited; neither was quoted in the note.
 
 Gate: cross-company comparison sentence requires two `TIER1` rows in the sources file — one per metric — where the row's Claim field is the metric definition quoted from the filing. If both rows are not present, the sentence does not ship.
+
+### Rule S4. Any note on a held position requires a pre-registered prior AND a written sell trigger (added 2026-09-13).
+
+Any published note on a name the analyst holds requires:
+- `position: HELD` in frontmatter, rendered at top of note and in track-record row (not a footnote).
+- Pre-registered prior committed BEFORE Phase 1 research begins, with the "I bought this because ___" sentence.
+- Specific observable **sell trigger** — an event or number that would make the analyst SELL, not just trim. "Thesis breaks" is vague and does not satisfy; "RPO growth turns negative" does.
+- Ownership-influence honest statement — one sentence on whether holding is affecting conviction and how the analyst is controlling for it.
+
+**A note on a held position that concludes BUY without a stated sell trigger is a defect.** See M12 for the discipline. Site build's disclaimer distinguishes HELD/NONE/FORMERLY_HELD as of 2026-09-13.
 
 ### Rule S3. Incentive attributions require a verbatim quote and named speaker in the sources file.
 
