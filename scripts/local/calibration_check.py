@@ -111,9 +111,12 @@ def evaluate_call(call: dict, today: date, headers: dict) -> dict:
         "opened": call["opened"],
         "entry_price": call["entry_price"],
         "entry_price_date": call["entry_price_date"],
+        "position_entry_price": call.get("position_entry_price"),
+        "position_entry_date": call.get("position_entry_date"),
         "benchmark": call["benchmark"],
         "benchmark_entry": call["benchmark_entry"],
         "benchmark_entry_date": call["benchmark_entry_date"],
+        "price_source": call.get("price_source"),
         "target": call.get("target"),
         "horizon_months": call["horizon_months"],
         "evaluation_date": call["evaluation_date"],
@@ -232,7 +235,13 @@ def main() -> int:
         print(f"[fail] METHOD.md not found: {method_path}", file=sys.stderr)
         return 3
 
-    # Load env for Alpaca
+    # Load env for Robinhood (SIP consolidated close via historicals)
+    # Note: alpaca-derived helpers are legacy; per METHOD.md §4 the source
+    # is Robinhood historicals close_price. The MCP-fetched values match
+    # exactly for the recorded 2026-09-11 entries. For future exit-price
+    # pulls the fetch layer should be swapped to Robinhood; retained
+    # Alpaca headers for now with the source assertion enforced by
+    # calls.yaml price_source field + ship-gate Gate 0b.
     load_env(Path.home() / "my-new-project" / "backend" / ".env")
     try:
         headers = alpaca_headers()
@@ -263,21 +272,27 @@ def main() -> int:
         if "error" in result and "BASIS MISMATCH" in result["error"]:
             basis_errors += 1
 
-    # Per-call table
-    print("=" * 100)
-    print(f"{'Ticker':<7} {'Note':<5} {'Rating':<6} {'Conv':<5} {'Prob':<6} {'Status':<11} {'Excess%':<8} {'Dir':<4} {'Retro':<6}")
-    print("-" * 100)
+    # Per-call table (split entry columns: call-entry vs position-entry per METHOD.md §9a)
+    print("=" * 118)
+    print(f"{'Ticker':<7} {'Note':<5} {'Rating':<6} {'Conv':<5} {'Prob':<6} {'CallEntry':<10} {'PosEntry':<10} {'Status':<11} {'Excess%':<8} {'Dir':<4} {'Retro':<6}")
+    print("-" * 118)
     for r in evaluations:
         excess = f"{r.get('excess_pct', ''):>7}" if r.get("excess_pct") is not None else "     —"
         direction = f"{r.get('direction_outcome', '—'):>3}" if r.get("direction_outcome") is not None else "  —"
         retro = "YES" if r.get("parameters_set_retroactively") else "no"
+        call_entry = f"${r['entry_price']:.2f}" if r.get('entry_price') is not None else "—"
+        pos_entry = f"${r['position_entry_price']:.2f}" if r.get('position_entry_price') is not None else "—"
         print(
             f"{r['ticker']:<7} {r['note']:<5} {r['rating']:<6} {r['conviction']:<5} "
-            f"{r['implied_probability']:<6} {r['status']:<11} {excess} {direction:<4} {retro:<6}"
+            f"{r['implied_probability']:<6} {call_entry:<10} {pos_entry:<10} "
+            f"{r['status']:<11} {excess} {direction:<4} {retro:<6}"
         )
         if "error" in r:
             print(f"        error: {r['error']}")
-    print("=" * 100)
+    print("=" * 118)
+    print("Note: CallEntry is the SIP consolidated close on entry_price_date (calibration basis).")
+    print("      PosEntry is the actual brokerage fill price on position_entry_date (personal P&L basis).")
+    print("      Per METHOD.md §9a, the two measure different things and are NEVER combined or compared.")
 
     if basis_errors:
         print(f"\n[FAIL] {basis_errors} basis mismatch(es) — evaluation refused per M22 Rule 3.")
@@ -289,44 +304,72 @@ def main() -> int:
     print(f"\nEvaluated: {n}  |  Open: {len(evaluations) - n}")
     print(f"Retroactive-parameters flag set on: {sum(1 for r in evaluations if r.get('parameters_set_retroactively'))} of {len(evaluations)} calls")
 
-    if n < SUPPRESSION_THRESHOLD:
-        print(f"\nINSUFFICIENT SAMPLE — n={n}, aggregate statistics suppressed until n>={SUPPRESSION_THRESHOLD}")
-        print("Per-call table above is the entire output.")
-        return 0
+    # Split evaluated calls by rating class per METHOD.md §8 — always compute
+    # the split-n even below threshold so the per-class suppression lines
+    # render distinctly rather than a single aggregate suppression line.
+    directional = [r for r in evaluated if r["rating"] in ("BUY", "SELL")]
+    hold_calls = [r for r in evaluated if r["rating"] == "HOLD"]
+    n_dir = len(directional)
+    n_hold = len(hold_calls)
 
-    # Aggregate stats
-    print(f"\n=== Aggregate statistics (n={n}) ===")
+    print(f"\n=== Aggregate statistics (per METHOD.md §8, split by rating class — never combined) ===")
+    print(f"Directional (BUY/SELL) evaluated: {n_dir}")
+    print(f"HOLD evaluated:                   {n_hold}")
 
-    # Hit rate by conviction bucket
-    print("\nHit rate by conviction bucket:")
-    print(f"{'Conv':<6} {'n':<4} {'Direction hit rate':<20} {'Implied':<10} {'Realized-Implied':<18} {'Mean excess%':<12}")
-    conv_buckets: dict[int, list[dict]] = {}
-    for r in evaluated:
-        conv_buckets.setdefault(r["conviction"], []).append(r)
-    for conv in sorted(conv_buckets):
-        rows = conv_buckets[conv]
-        n_bucket = len(rows)
-        hit_rate = sum(r["direction_outcome"] for r in rows) / n_bucket
-        implied = rows[0]["implied_probability"]
-        mean_excess = sum(r["excess_pct"] for r in rows) / n_bucket
-        gap = hit_rate - implied
-        print(
-            f"{conv:<6} {n_bucket:<4} {hit_rate:.2%}{'':<12} "
-            f"{implied:.2%}{'':<4} {gap:+.2%}{'':<10} {mean_excess:+.2f}"
-        )
+    # Directional Brier + calibration table
+    if n_dir < SUPPRESSION_THRESHOLD:
+        print(f"\n[directional] INSUFFICIENT SAMPLE — n={n_dir}, brier_directional suppressed until n>={SUPPRESSION_THRESHOLD}")
+    else:
+        brier_dir = sum((r["implied_probability"] - r["direction_outcome"]) ** 2 for r in directional) / n_dir
+        print(f"\nbrier_directional (BUY/SELL, n={n_dir}): {brier_dir:.4f}  (no-skill reference: 0.2500; lower is better)")
 
-    # Brier score
-    brier = sum((r["implied_probability"] - r["direction_outcome"]) ** 2 for r in evaluated) / n
-    print(f"\nBrier score: {brier:.4f}  (no-skill reference: 0.2500; lower is better)")
+        print("\nDirectional hit rate by conviction bucket:")
+        print(f"{'Conv':<6} {'n':<4} {'Hit rate':<12} {'Implied':<10} {'Realized-Implied':<18} {'Mean excess%':<12}")
+        conv_buckets: dict[int, list[dict]] = {}
+        for r in directional:
+            conv_buckets.setdefault(r["conviction"], []).append(r)
+        for conv in sorted(conv_buckets):
+            rows = conv_buckets[conv]
+            n_bucket = len(rows)
+            hit_rate = sum(r["direction_outcome"] for r in rows) / n_bucket
+            implied = rows[0]["implied_probability"]
+            mean_excess = sum(r["excess_pct"] for r in rows) / n_bucket
+            gap = hit_rate - implied
+            print(f"{conv:<6} {n_bucket:<4} {hit_rate:.2%}{'':<4} {implied:.2%}{'':<4} {gap:+.2%}{'':<10} {mean_excess:+.2f}")
 
-    # Mechanism distribution
-    print("\nMechanism distribution (reported separately; NEVER combined with direction hit rate):")
-    mech_counts: dict[str, int] = {}
-    for r in evaluated:
-        mech = r.get("mechanism", "UNKNOWN")
-        mech_counts[mech] = mech_counts.get(mech, 0) + 1
-    for mech, cnt in sorted(mech_counts.items()):
-        print(f"  {mech:<35} {cnt:>3}")
+    # HOLD Brier + calibration table (separate, never combined)
+    if n_hold < SUPPRESSION_THRESHOLD:
+        print(f"\n[hold] INSUFFICIENT SAMPLE — n={n_hold}, brier_hold suppressed until n>={SUPPRESSION_THRESHOLD}")
+    else:
+        brier_hold = sum((r["implied_probability"] - r["direction_outcome"]) ** 2 for r in hold_calls) / n_hold
+        # HOLD base rate = proportion of HOLD calls that fell inside the band
+        hold_base_rate = sum(r["direction_outcome"] for r in hold_calls) / n_hold
+        print(f"\nbrier_hold (n={n_hold}): {brier_hold:.4f}  (ex-post base rate {hold_base_rate:.2%}; no-skill reference vs base rate = {(hold_base_rate * (1 - hold_base_rate)):.4f})")
+
+        print("\nHOLD hit rate by conviction bucket:")
+        print(f"{'Conv':<6} {'n':<4} {'Hit rate':<12} {'Implied':<10} {'Realized-Implied':<18}")
+        conv_buckets_h: dict[int, list[dict]] = {}
+        for r in hold_calls:
+            conv_buckets_h.setdefault(r["conviction"], []).append(r)
+        for conv in sorted(conv_buckets_h):
+            rows = conv_buckets_h[conv]
+            n_bucket = len(rows)
+            hit_rate = sum(r["direction_outcome"] for r in rows) / n_bucket
+            implied = rows[0]["implied_probability"]
+            gap = hit_rate - implied
+            print(f"{conv:<6} {n_bucket:<4} {hit_rate:.2%}{'':<4} {implied:.2%}{'':<4} {gap:+.2%}")
+
+    print("\nDirectional and HOLD Brier scores are NEVER combined into a single figure (METHOD.md §8).")
+
+    # Mechanism distribution — only if any calls have been evaluated
+    if n > 0:
+        print("\nMechanism distribution (reported separately; NEVER combined with direction hit rate):")
+        mech_counts: dict[str, int] = {}
+        for r in evaluated:
+            mech = r.get("mechanism", "UNKNOWN")
+            mech_counts[mech] = mech_counts.get(mech, 0) + 1
+        for mech, cnt in sorted(mech_counts.items()):
+            print(f"  {mech:<35} {cnt:>3}")
 
     return 0
 

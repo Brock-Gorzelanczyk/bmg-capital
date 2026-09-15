@@ -92,12 +92,38 @@ if echo "$DIRECTION_LINE" | grep -qiE '^(BUY|SELL|HOLD)$'; then
                 M22_ERRORS=$((M22_ERRORS + 1))
             fi
         done
-        # entry_price_date == benchmark_entry_date (calibration anchor date)
+        # entry_price_date == benchmark_entry_date (calibration anchor date, date-basis)
         ENTRY_DATE="$(grep -E '^entry_price_date:' "$DOC" | head -1 | sed 's/^[^:]*:[[:space:]]*//' | tr -d '"' | tr -d "'" | sed 's/[[:space:]]*$//')"
         BENCH_DATE="$(grep -E '^benchmark_entry_date:' "$DOC" | head -1 | sed 's/^[^:]*:[[:space:]]*//' | tr -d '"' | tr -d "'" | sed 's/[[:space:]]*$//')"
         if [ -n "$ENTRY_DATE" ] && [ -n "$BENCH_DATE" ] && [ "$ENTRY_DATE" != "$BENCH_DATE" ]; then
             echo "[FAIL] M22 date-basis mismatch: entry_price_date=$ENTRY_DATE != benchmark_entry_date=$BENCH_DATE"
             M22_ERRORS=$((M22_ERRORS + 1))
+        fi
+        # price_source uniform across every leg for this call in calls.yaml (source-basis, M23)
+        # Extract ticker + look up entry in calls.yaml; assert every price_source field
+        # under that entry equals sip-consolidated-close (the committed source per METHOD.md §4).
+        TICKER="$(grep -E '^ticker:' "$DOC" | head -1 | sed 's/^[^:]*:[[:space:]]*//' | tr -d '"' | tr -d "'" | sed 's/[[:space:]]*$//')"
+        CALLS_YAML="$VAULT_ROOT/calibration/calls.yaml"
+        if [ -n "$TICKER" ] && [ -f "$CALLS_YAML" ]; then
+            # Extract the price_source field within this ticker's entry block
+            PRICE_SOURCE="$(awk -v tk="$TICKER" '
+                /^- ticker:/ { in_entry = 0 }
+                $1 == "-" && $2 == "ticker:" && $3 == tk { in_entry = 1; next }
+                in_entry && /^  price_source:/ {
+                    sub(/^  price_source:[[:space:]]*/, "")
+                    print
+                    exit
+                }
+            ' "$CALLS_YAML")"
+            if [ -z "$PRICE_SOURCE" ]; then
+                echo "[FAIL] M23 price_source missing in calls.yaml for ticker $TICKER"
+                M22_ERRORS=$((M22_ERRORS + 1))
+            elif [ "$PRICE_SOURCE" != "sip-consolidated-close" ]; then
+                echo "[FAIL] M23 price_source is '$PRICE_SOURCE' — must equal 'sip-consolidated-close' per METHOD.md §4"
+                M22_ERRORS=$((M22_ERRORS + 1))
+            else
+                echo "[ok]   M23 price_source = $PRICE_SOURCE (uniform across legs)"
+            fi
         fi
         if [ $M22_ERRORS -gt 0 ]; then
             echo "[FAIL] Gate 0b failed with $M22_ERRORS M22 error(s) — document is NOT shippable."
