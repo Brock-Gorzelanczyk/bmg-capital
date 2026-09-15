@@ -113,28 +113,41 @@ def fetch_recent_filings(cik: str, form_type: str, count: int = 20, retries: int
     return filings
 
 
-def append_work_order(work_orders_path: Path, ticker: str, note: str, filing: dict, form: str) -> None:
-    """Append a NEW_FILING flag to WORK-ORDERS.md."""
-    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-    # Which pre-registered items does this filing owe evaluation on?
+def _owed_to_for_form(form: str) -> list[str]:
     owed_to = []
     if form in ("10-Q", "10-K"):
         owed_to.append("every kill criterion and sell trigger for this ticker → auto-flip to PENDING")
     if form == "8-K":
         owed_to.append("check for earnings-date confirmation, guidance change, or material-event trigger")
     if form == "4":
-        owed_to.append("insider-action check (ORCL: Ellison/Catz transactions; open-question watch)")
+        owed_to.append("insider-action check (open-question watch where answerable_by tag matches)")
     if form == "DEF 14A":
-        owed_to.append("proxy disclosures (ORCL: Ellison share-pledging open question)")
+        owed_to.append("proxy disclosures (open-question watch: share-pledging, related-party, etc.)")
     if form in ("S-3", "424B5", "424B2", "424B3"):
         owed_to.append("dilution leg — new shelf or ATM affects sell trigger economics")
+    return owed_to
 
-    entry = f"""### {now} — {ticker} — NEW_FILING
+
+def append_work_order(work_orders_path: Path, ticker: str, note: str, filing: dict, form: str,
+                       flag_class: str = "NEW_FILING", extra_detail: str = "") -> None:
+    """Append a work-order entry to WORK-ORDERS.md.
+
+    flag_class values:
+      NEW_FILING       — a filing has appeared since the last watermark
+      REVIEW_BACKLOG   — seed-time entry per M24 §5 (initial-state visibility)
+    """
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    owed_to = _owed_to_for_form(form)
+    detail = f"{flag_class} — {form} filing: accession {filing['accession']}, filing_date {filing['filing_date']}"
+    if extra_detail:
+        detail = detail + " (" + extra_detail + ")"
+
+    entry = f"""### {now} — {ticker} — {flag_class}
 
 - **Ticker:** {ticker}
 - **Note:** {note}
-- **Flag class:** NEW_FILING
-- **Detail:** New {form} filing detected: accession {filing['accession']}, filing_date {filing['filing_date']}
+- **Flag class:** {flag_class}
+- **Detail:** {detail}
 - **Source:** {filing['url']}
 - **Owed to:** {'; '.join(owed_to) if owed_to else 'general primary-source watch'}
 - **Detected by:** monitor_filings.py
@@ -172,17 +185,22 @@ def main() -> int:
         return 3
 
     now_iso = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    today = datetime.now(timezone.utc).date()
     new_flag_count = 0
     seeded_count = 0
+    backlog_count = 0
 
     print(f"monitor_filings.py — {now_iso}")
     print(f"watching {len(calendar)} tickers × {len(WATCHED_FORMS)} form types = {len(calendar) * len(WATCHED_FORMS)} queries")
     print()
 
+    from datetime import date as _date_cls
+
     for call in calendar:
         ticker = call["ticker"]
         cik = str(call["cik"])
         note = f"{call['note']:03d}-{ticker}" if isinstance(call['note'], int) else f"{call['note']}-{ticker}"
+        answerable_by_forms = set(call.get("answerable_by_forms") or [])
         if ticker not in last_seen:
             last_seen[ticker] = {}
 
@@ -203,10 +221,30 @@ def main() -> int:
                 }
                 seeded_count += 1
                 print(f"[seed] {ticker} {form}: watermark set to {newest['accession']} ({newest['filing_date']})")
+
+                # M24 §5 — initial-state visibility.
+                # On seed, ALSO emit a REVIEW_BACKLOG entry if:
+                #  (a) filing_date within 30 days of today, OR
+                #  (b) form is in the ticker's answerable_by_forms list (any age).
+                filing_dt = _date_cls.fromisoformat(newest["filing_date"])
+                age_days = (today - filing_dt).days
+                reasons = []
+                if age_days <= 30:
+                    reasons.append(f"filed {age_days}d ago (≤30d window)")
+                if form in answerable_by_forms:
+                    reasons.append(f"form tagged answerable_by on open question for {ticker}")
+                if reasons and not args.seed_only:
+                    append_work_order(
+                        work_orders_path, ticker, note, newest, form,
+                        flag_class="REVIEW_BACKLOG",
+                        extra_detail="; ".join(reasons),
+                    )
+                    backlog_count += 1
+                    print(f"[BACKLOG] {ticker} {form}: watermark filing {newest['accession']} ({newest['filing_date']}) → {'; '.join(reasons)}")
             elif newest["accession"] != prev["last_accession"] and newest["filing_date"] > prev["last_filing_date"]:
                 # New filing since last watermark — flag it
                 if not args.seed_only:
-                    append_work_order(work_orders_path, ticker, note, newest, form)
+                    append_work_order(work_orders_path, ticker, note, newest, form, flag_class="NEW_FILING")
                     new_flag_count += 1
                     print(f"[FLAG] {ticker} {form}: NEW filing {newest['accession']} ({newest['filing_date']})")
                 # Update watermark either way
@@ -225,8 +263,12 @@ def main() -> int:
         yaml.safe_dump(last_seen, f, default_flow_style=False, sort_keys=False)
 
     print()
-    print(f"seeded: {seeded_count}   flagged: {new_flag_count}")
-    if seeded_count > 0 and new_flag_count == 0:
+    print(f"seeded: {seeded_count}   review-backlog: {backlog_count}   new-flags: {new_flag_count}")
+    if backlog_count > 0:
+        print(f"REVIEW_BACKLOG entries added to monitoring/WORK-ORDERS.md — {backlog_count} filing(s)")
+        print("that were absorbed as watermarks but are (a) recent or (b) tagged answerable_by")
+        print("per open questions require human review before the cold-start is trusted.")
+    elif seeded_count > 0 and new_flag_count == 0:
         print("(seed-only run — no work orders raised on this pass)")
 
     return 0
