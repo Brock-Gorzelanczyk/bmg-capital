@@ -71,6 +71,47 @@ else
 fi
 echo
 
+echo "=== Gate 0b/4: calibration parameters check (M22) ==="
+# Every rated call (direction: BUY | SELL | HOLD, status: OPEN)
+# must carry the seven M22 calibration fields at ship time, with
+# benchmark_entry_date == entry_price_date. Missing or mismatched
+# fields fail the gate.
+#
+# Rated notes are identified by presence of `direction:` field in
+# frontmatter with value BUY, SELL, or HOLD.
+
+DIRECTION_LINE="$(grep -E '^direction:' "$DOC" | head -1 | sed 's/^direction:[[:space:]]*//' | tr -d '"' | tr -d "'" | sed 's/[[:space:]]*$//')"
+
+if echo "$DIRECTION_LINE" | grep -qiE '^(BUY|SELL|HOLD)$'; then
+    STATUS_LINE="$(grep -E '^status:' "$DOC" | head -1 | sed 's/^status:[[:space:]]*//' | tr -d '"' | tr -d "'" | sed 's/[[:space:]]*$//')"
+    if [ "$STATUS_LINE" = "OPEN" ]; then
+        M22_ERRORS=0
+        for field in benchmark benchmark_entry benchmark_entry_date entry_price_date horizon_months evaluation_date thesis_mechanism parameters_set_retroactively; do
+            if ! grep -qE "^${field}:" "$DOC"; then
+                echo "[FAIL] M22 field missing: $field"
+                M22_ERRORS=$((M22_ERRORS + 1))
+            fi
+        done
+        # entry_price_date == benchmark_entry_date (calibration anchor date)
+        ENTRY_DATE="$(grep -E '^entry_price_date:' "$DOC" | head -1 | sed 's/^[^:]*:[[:space:]]*//' | tr -d '"' | tr -d "'" | sed 's/[[:space:]]*$//')"
+        BENCH_DATE="$(grep -E '^benchmark_entry_date:' "$DOC" | head -1 | sed 's/^[^:]*:[[:space:]]*//' | tr -d '"' | tr -d "'" | sed 's/[[:space:]]*$//')"
+        if [ -n "$ENTRY_DATE" ] && [ -n "$BENCH_DATE" ] && [ "$ENTRY_DATE" != "$BENCH_DATE" ]; then
+            echo "[FAIL] M22 date-basis mismatch: entry_price_date=$ENTRY_DATE != benchmark_entry_date=$BENCH_DATE"
+            M22_ERRORS=$((M22_ERRORS + 1))
+        fi
+        if [ $M22_ERRORS -gt 0 ]; then
+            echo "[FAIL] Gate 0b failed with $M22_ERRORS M22 error(s) — document is NOT shippable."
+            exit 22
+        fi
+        echo "[ok]   M22 fields present; benchmark_entry_date=$BENCH_DATE matches entry basis."
+    else
+        echo "[skip] status=$STATUS_LINE (M22 applies to status:OPEN rated calls)"
+    fi
+else
+    echo "[skip] direction=$DIRECTION_LINE (M22 applies to rated BUY/SELL/HOLD notes)"
+fi
+echo
+
 echo "=== Gate 1/4: provenance check (marker set equality) ==="
 python3 "$REPO_ROOT/scripts/vault_provenance_check.py" "$DOC"
 GATE1=$?
